@@ -1,25 +1,181 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "Peer Assessment 1"
+author: "Matt Witten"
+date: "Tuesday, April 14, 2015"
+output: html_document
 ---
 
 
-## Loading and preprocessing the data
 
 
+Loading and preprocessing the data
+==================================
+##Show any code that is needed to
 
-## What is mean total number of steps taken per day?
+###load libraries needed
+```{r message = FALSE, warning = FALSE}
+library(sqldf)
+library(ggplot2)
+library(knitr)
+
+```
 
 
+###download zip file
 
-## What is the average daily activity pattern?
+```{r  message = FALSE, warning = FALSE}
+url <- "http://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+download.file(url, "repdata-data-activity.zip", mode="wb")
+unzip("repdata-data-activity.zip")
+```
+
+##1. Load the data (i.e. read.csv())
+```{r  message = FALSE}
+dataset <- read.csv(unzip("repdata-data-activity.zip", "activity.csv"), fill = TRUE) 
 
 
-
-## Imputing missing values
-
+```
 
 
-## Are there differences in activity patterns between weekdays and weekends?
+##2. Process/transform the data (if necessary) into a format suitable for your analysis
+
+What is mean total number of steps taken per day?
+=================================================
+
+##For this part of the assignment, you can ignore the missing values in the dataset.
+
+##1. Calculate the total number of steps taken per day
+
+```{r  message = FALSE}
+day<- sqldf("select date, sum(steps) as steps
+        from dataset
+        where steps is not null
+        group by date")
+```
+
+##2. If you do not understand the difference between a histogram and a barplot, research the difference between them. Make a histogram of the total number of steps taken each day
+
+```{r  message = FALSE}
+ggplot(data = day, aes(x=steps)) + geom_histogram()
+```
+
+##3. Calculate and report the mean and median of the total number of steps taken per day
+
+###mean of steps taken per day
+```{r  message = FALSE}
+kable(mean(day$steps, na.rm = TRUE))
+```
+
+###median of steps taken per day
+```{r  message = FALSE}
+kable(median(day$steps, na.rm = TRUE))
+```
+
+What is the average daily activity pattern?
+===========================================
+
+##Make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
+
+```{r  message = FALSE}
+interval<- sqldf("select interval, avg(steps) as steps
+        from dataset
+        where steps is not null
+        group by interval")
+
+ggplot(data = interval, aes(x=interval, y=steps)) + geom_line()
+```
+
+##Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+```{r  message = FALSE}
+kable(sqldf("select interval from interval where steps in (select max(steps) from interval)"))
+```
+
+Inputing missing values
+=======================
+
+##Note that there are a number of days/intervals where there are missing values (coded as NA). The presence of missing days may introduce bias into some calculations or summaries of the data.
+
+##1. Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)
+
+```{r  message = FALSE}
+
+kable(sum(is.na(dataset)))
+```
+
+##2. Devise a strategy for filling in all of the missing values in the dataset. The strategy does not need to be sophisticated. For example, you could use the mean/median for that day, or the mean for that 5-minute interval, etc.
+
+
+```{r  message = FALSE}
+help2 <- sqldf("select * 
+      from dataset   
+      where dataset.steps is null")
+
+filled <- sqldf("select interval.steps, help2.date, help2.interval 
+      from help2   
+      left join interval  
+      on help2.interval = interval.interval")
+
+```
+
+
+##3. Create a new dataset that is equal to the original dataset but with the missing data filled in.
+
+
+```{r  message = FALSE}
+fixed<- sqldf("select * from filled
+              union
+              select * from dataset
+              where steps is not null")
+```
+
+##4. Make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day. Do these values differ from the estimates from the first part of the assignment? What is the impact of imputing missing data on the estimates of the total daily number of steps?
+
+```{r  message = FALSE}
+day2<- sqldf("select date, sum(steps) as steps
+        from fixed
+        where steps > 0
+        group by date")
+
+
+```
+
+
+```{r  message = FALSE}
+ggplot(data = day2, aes(x=steps)) + geom_histogram()
+```
+
+
+###mean of steps taken per day
+```{r  message = FALSE}
+kable(mean(day2$steps, na.rm = TRUE))
+```
+
+###median of steps taken per day
+```{r  message = FALSE}
+kable(median(day2$steps, na.rm = TRUE))
+```
+
+Are there differences in activity patterns between weekdays and weekends?
+=========================================================================
+
+##1. For this part the weekdays() function may be of some help here. Use the dataset with the filled-in missing values for this part.
+
+
+##2. Create a new factor variable in the dataset with two levels - "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.
+```{r  message = FALSE}
+fixed$day <- weekdays(as.Date(fixed$date))
+fixed_factor <- sqldf("select
+                        *,
+                        case
+                                when day in ('Saturday','Sunday') then 'Weekend'
+                                else 'Weekday' end as type_ind
+                        from fixed")
+```
+##3. Make a panel plot containing a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). See the README file in the GitHub repository to see an example of what this plot should look like using simulated data.
+```{r  message = FALSE}
+interval2<- sqldf("select interval, type_ind, avg(steps) as steps
+        from fixed_factor
+        group by interval, type_ind")
+
+ggplot(data = interval2, aes(x=interval, y=steps, colour=type_ind)) + geom_line()+facet_wrap(~type_ind, nrow=2)
+```
